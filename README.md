@@ -3,7 +3,7 @@
 Sandboxed file-system tools for working with resume files (PDF, DOCX, TXT/MD),
 designed to be exposed to an LLM through function calling.
 
-> Status: Part A (the tools) is complete. The LLM integration (`llm_file_assistant.py`) is next.
+> Status: both parts are implemented: the tools (Part A) and the Gemini assistant (Part B).
 
 ## Setup
 
@@ -20,6 +20,7 @@ cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B
 
 | File | Responsibility |
 |---|---|
+| `llm_file_assistant.py` | Gemini assistant: tool schemas, tool-calling loop, CLI |
 | `fs_tools.py` | The four tools: `read_file`, `list_files`, `write_file`, `search_in_file` |
 | `parsers.py` | Text extraction per file type; add a type by adding a function + a `PARSERS` entry |
 | `sandbox.py` | Confines every path to `FS_ROOT` (default: current directory) |
@@ -56,6 +57,31 @@ Design notes:
 - **Writes** are atomic (temp file + rename) and limited to text formats, so the model can't produce fake PDFs/DOCX.
 - **Scanned PDFs** have no text layer; `read_file` succeeds with a `warning` rather than doing OCR.
 - **Real resumes:** put them in `resumes/private/` (git-ignored) to keep personal data out of the repo.
+
+## The assistant (Part B)
+
+```bash
+.venv/bin/python llm_file_assistant.py                                  # interactive chat
+.venv/bin/python llm_file_assistant.py "Find resumes mentioning Python experience"
+```
+
+Optional environment variables (in `.env`): `GEMINI_MODEL` (default `gemini-flash-latest`) and `FS_ROOT`.
+
+Example queries, with the tool calls the model chose (shown on stderr):
+
+| Query | Tool calls |
+|---|---|
+| "Read all resumes in the resumes folder" | `list_files` -> `read_file` x 3 |
+| "Find resumes mentioning Python experience" | `list_files` -> `search_in_file` x 3 |
+| "Create a summary file for resume_john_doe.pdf" | `list_files` -> `read_file` -> `write_file` (`summaries/resume_john_doe_summary.txt`) |
+
+How it works:
+- Each tool has a hand-written `FunctionDeclaration` (name, description, JSON schema) that the model sees; `TOOL_REGISTRY` maps names to the real functions.
+- `run_agent` is an explicit loop: send the conversation -> if the model asks for tools, run them and send the results back -> repeat until it answers in text. Automatic function calling is switched off so each step is visible and capped (`MAX_STEPS = 10`).
+- Tool errors (bad arguments, sandbox violations) go back to the model as ordinary results, so it can recover.
+- API errors 429/5xx are retried; for 429 the wait follows the server's `retryDelay` hint (the free tier allows ~5 requests/minute per model, and every tool step is one request, so expect pauses on multi-step queries).
+- Conversation history is kept across turns in interactive mode.
+- Tests use a scripted fake client, so the suite needs no API key or network.
 
 ## Development
 
