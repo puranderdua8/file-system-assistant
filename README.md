@@ -81,6 +81,8 @@ Design notes:
 .venv/bin/python llm_file_assistant.py "Find resumes mentioning Python experience"
 ```
 
+> **Note:** free Gemini API keys are usually rate-limited, so you may see `429` errors during live testing (see [Limitations](#limitations)).
+
 Optional environment variables (in `.env`): `GEMINI_MODEL` (default `gemini-flash-latest`) and `FS_ROOT`.
 
 Example queries (with the sample resumes copied into `resumes/`) and the tool calls the model chose (shown on stderr):
@@ -95,7 +97,7 @@ How it works:
 - Each tool has a hand-written `FunctionDeclaration` (name, description, JSON schema) that the model sees; `TOOL_REGISTRY` maps names to the real functions.
 - `run_agent` is an explicit loop: send the conversation -> if the model asks for tools, run them and send the results back -> repeat until it answers in text. Automatic function calling is switched off so each step is visible and capped (`MAX_STEPS = 10`).
 - Tool errors (bad arguments, sandbox violations) go back to the model as ordinary results, so it can recover.
-- API errors 429/5xx are retried; for 429 the wait follows the server's `retryDelay` hint (the free tier allows ~5 requests/minute per model, and every tool step is one request, so expect pauses on multi-step queries).
+- API errors are not retried: the assistant prints the error (for example `Gemini API error (429): ...`) and stops. See *Free-tier rate limits* under Limitations.
 - Conversation history is kept across turns in interactive mode.
 - Tests use a scripted fake client, so the suite needs no API key or network.
 
@@ -131,7 +133,7 @@ The keyword **"Python"** was found in all 3 resumes:
 - **`list_files` is not recursive:** it lists one folder level, so resumes in sub-folders must be listed folder by folder.
 - **Keyword search is literal:** `search_in_file` matches the exact word or phrase (case-insensitive). It does not understand synonyms or judge skill level, so "Python experience" means "mentions Python".
 - **Large folders are costly:** "read all resumes" puts every file's text into the model's context. That is fine for a handful of resumes and slow or expensive for hundreds. Very long files are truncated at 20,000 characters.
-- **Free-tier rate limits:** every tool step is one API request, and the free tier allows roughly 5 per minute per model, so multi-step queries can pause while the retry logic waits.
+- **Free-tier rate limits:** free API keys are usually rate-limited (per minute and per day, depending on the model), and every tool step is one API request, so a multi-step query can use several requests. Expect `429` (quota exceeded) failures during live testing. The assistant does not retry: it prints the error and stops. Wait for the quota to reset (the message says how long), use another API key, or set `GEMINI_MODEL` to a different model.
 - **Overwrites:** `write_file` replaces an existing file without asking (the result reports `overwrote: true`). Only `.txt`, `.md`, `.json` and `.csv` can be written.
 - **Model behaviour varies:** the model decides which tools to call, so the exact sequence and wording can differ from run to run.
 
