@@ -12,7 +12,7 @@ Requires **Python 3.10+** (the dependencies need it; macOS's system `python3` is
 ```bash
 python3 -m venv .venv           # must be Python >= 3.10: check with `python3 --version`
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt      # runtime dependencies only
 cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B only)
 ```
 
@@ -137,7 +137,10 @@ The keyword **"Python"** was found in all 3 resumes:
 
 ## Development
 
+Install the dev tools (pytest, ruff, PyYAML) on top of the runtime dependencies:
+
 ```bash
+.venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```

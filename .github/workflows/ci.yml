@@ -21,7 +21,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - run: pip install -r requirements.txt
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
