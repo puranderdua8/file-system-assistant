@@ -3,8 +3,8 @@
 Every tool returns JSON-serialisable data and never raises: failures come back
 as ``{"success": False, "error": "..."}`` so an LLM can read and react to them.
 
-All paths are confined to a sandbox root (``FS_ROOT`` env var, default: the
-current working directory) so a model cannot read or write outside it.
+All paths are confined to a sandbox root (see ``sandbox.py``). Text extraction
+per file type lives in ``parsers.py``.
 """
 
 from __future__ import annotations
@@ -15,34 +15,14 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from docx import Document
-from pypdf import PdfReader
+from errors import ToolError
+from parsers import extract_text
+from sandbox import resolve_path
 
-READABLE_EXTENSIONS = {".txt", ".md", ".pdf", ".docx"}
 WRITABLE_EXTENSIONS = {".txt", ".md", ".json", ".csv"}
 MAX_CONTENT_CHARS = 20_000
 MAX_MATCHES = 50
 CONTEXT_CHARS = 80
-
-
-class ToolError(Exception):
-    """Expected, user-presentable failure inside a tool."""
-
-
-def _root() -> Path:
-    return Path(os.environ.get("FS_ROOT") or Path.cwd()).expanduser().resolve()
-
-
-def _resolve(path: str) -> Path:
-    """Resolve ``path`` (relative to the sandbox root) and ensure it stays inside."""
-    root = _root()
-    p = Path(path).expanduser()
-    if not p.is_absolute():
-        p = root / p
-    p = p.resolve()
-    if p != root and root not in p.parents:
-        raise ToolError(f"Access denied: '{path}' is outside the allowed directory")
-    return p
 
 
 def _iso(ts: float) -> str:
@@ -55,46 +35,11 @@ def _error(exc: Exception) -> dict:
     return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
-def _extract_text(path: Path) -> tuple[str, dict]:
-    """Return (text, extra_metadata) for a supported file type."""
-    if not path.exists():
-        raise ToolError(f"File not found: {path.name}")
-    if not path.is_file():
-        raise ToolError(f"Not a file: {path.name}")
-    ext = path.suffix.lower()
-    if ext not in READABLE_EXTENSIONS:
-        raise ToolError(
-            f"Unsupported file type '{ext or '(none)'}'. "
-            f"Supported: {', '.join(sorted(READABLE_EXTENSIONS))}"
-        )
-
-    if ext in {".txt", ".md"}:
-        raw = path.read_bytes()
-        try:
-            return raw.decode("utf-8"), {}
-        except UnicodeDecodeError:
-            return raw.decode("latin-1"), {}
-
-    if ext == ".pdf":
-        reader = PdfReader(str(path))
-        if reader.is_encrypted:
-            raise ToolError("PDF is password-protected")
-        pages = [page.extract_text() or "" for page in reader.pages]
-        return "\n".join(pages).strip(), {"page_count": len(pages)}
-
-    doc = Document(str(path))
-    parts = [p.text for p in doc.paragraphs]
-    for table in doc.tables:
-        for row in table.rows:
-            parts.append(" | ".join(cell.text for cell in row.cells))
-    return "\n".join(parts).strip(), {}
-
-
 def read_file(filepath: str) -> dict:
     """Read a resume (.pdf, .txt, .md, .docx) and return its text and metadata."""
     try:
-        path = _resolve(filepath)
-        text, extra = _extract_text(path)
+        path = resolve_path(filepath)
+        text, extra = extract_text(path)
         stat = path.stat()
         result = {
             "success": True,
@@ -125,7 +70,7 @@ def list_files(directory: str, extension: str | None = None) -> list:
     one-item list ``[{"success": False, "error": ...}]`` to keep the list shape.
     """
     try:
-        path = _resolve(directory)
+        path = resolve_path(directory)
         if not path.exists():
             raise ToolError(f"Directory not found: {directory}")
         if not path.is_dir():
@@ -158,7 +103,7 @@ def list_files(directory: str, extension: str | None = None) -> list:
 def write_file(filepath: str, content: str) -> dict:
     """Write text to a file, creating parent directories. Overwrites existing files."""
     try:
-        path = _resolve(filepath)
+        path = resolve_path(filepath)
         ext = path.suffix.lower()
         if ext not in WRITABLE_EXTENSIONS:
             raise ToolError(
@@ -194,8 +139,8 @@ def search_in_file(filepath: str, keyword: str) -> dict:
     try:
         if not keyword or not keyword.strip():
             raise ToolError("Keyword must not be empty")
-        path = _resolve(filepath)
-        text, _ = _extract_text(path)
+        path = resolve_path(filepath)
+        text, _ = extract_text(path)
         matches = []
         total = 0
         for m in re.finditer(re.escape(keyword), text, re.IGNORECASE):
