@@ -218,3 +218,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific: keep real resumes (personal data) and generated output out of git
+resumes/private/
+summaries/
