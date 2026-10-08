@@ -219,6 +219,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Project-specific: keep real resumes (personal data) and generated output out of git
-resumes/private/
-summaries/
+# Project-specific: resumes are personal data and summaries are generated output.
+# Keep the folders (via .gitkeep) but never their contents.
+resumes/*
+!resumes/.gitkeep
+summaries/*
+!summaries/.gitkeep
