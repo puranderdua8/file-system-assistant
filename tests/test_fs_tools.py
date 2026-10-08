@@ -58,6 +58,13 @@ def test_list_extension_filter_variants(resumes):
         assert [f["name"] for f in fs.list_files("resumes", ext)] == ["carol.PDF"]
 
 
+def test_list_hides_dotfiles(resumes):
+    (resumes / ".gitkeep").write_text("")
+    (resumes / ".DS_Store").write_text("x")
+    names = [f["name"] for f in fs.list_files("resumes")]
+    assert names == ["alice.txt", "bob.docx", "carol.PDF", "notes.csv"]
+
+
 def test_list_skips_subdirs_and_handles_missing(resumes):
     (resumes / "sub").mkdir()
     assert "sub" not in [f["name"] for f in fs.list_files("resumes")]
