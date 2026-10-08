@@ -153,3 +153,35 @@ def test_does_not_retry_client_errors():
     client = FakeClient(bad, say("never reached"))
     with pytest.raises(genai_errors.ClientError):
         lfa.run_agent("hi", client)
+
+
+# ---------- honoring the server's retry hint ----------
+def _quota_error(delay=None, message="quota exceeded"):
+    err = {"message": message}
+    if delay:
+        err["details"] = [
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay}
+        ]
+    return genai_errors.ClientError(429, {"error": err})
+
+
+def test_server_retry_delay_parsing():
+    assert lfa.server_retry_delay(_quota_error("44s")) == 44.0
+    assert lfa.server_retry_delay(_quota_error(message="Please retry in 35.1s.")) == 35.1
+    assert lfa.server_retry_delay(_quota_error()) is None
+    assert lfa.server_retry_delay(ValueError("x")) is None
+
+
+def test_429_waits_for_server_hint_and_retries(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(lfa._generate.retry, "sleep", sleeps.append)
+    client = FakeClient(_quota_error("44s"), say("ok"))
+    assert lfa.run_agent("hi", client) == "ok"
+    assert sleeps == [45.0]
+
+
+def test_server_hint_is_capped(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr(lfa._generate.retry, "sleep", sleeps.append)
+    lfa.run_agent("hi", FakeClient(_quota_error("600s"), say("ok")))
+    assert sleeps == [lfa.MAX_RETRY_WAIT]

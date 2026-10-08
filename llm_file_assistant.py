@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -20,7 +21,13 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import (
+    RetryCallState,
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 import fs_tools
 from errors import error_response
@@ -137,10 +144,45 @@ def _is_transient(exc: BaseException) -> bool:
     return isinstance(exc, genai_errors.APIError) and (exc.code == 429 or (exc.code or 0) >= 500)
 
 
+MAX_RETRY_WAIT = 60.0
+_backoff = wait_exponential(multiplier=1, max=10)
+
+
+def server_retry_delay(exc: BaseException) -> float | None:
+    """Seconds the API asked us to wait (RetryInfo.retryDelay or 'retry in 44.4s')."""
+    if not isinstance(exc, genai_errors.APIError):
+        return None
+    body = exc.details  # the parsed error body, e.g. {"error": {"details": [...]}}
+    if isinstance(body, dict):
+        body = (body.get("error") or {}).get("details") or []
+    for item in body if isinstance(body, list) else []:
+        match = re.fullmatch(r"([\d.]+)s", str(item.get("retryDelay", "")))
+        if match:
+            return float(match.group(1))
+    match = re.search(r"retry in ([\d.]+)s", str(exc.message or ""), re.IGNORECASE)
+    return float(match.group(1)) if match else None
+
+
+def _wait(state: RetryCallState) -> float:
+    """Honor the server's retry hint when given; otherwise back off exponentially."""
+    hinted = server_retry_delay(state.outcome.exception()) if state.outcome else None
+    if hinted is not None:
+        return min(hinted + 1, MAX_RETRY_WAIT)
+    return _backoff(state)
+
+
+def _announce_retry(state: RetryCallState) -> None:
+    exc = state.outcome.exception() if state.outcome else None
+    wait = state.next_action.sleep if state.next_action else 0
+    code = getattr(exc, "code", "?")
+    print(f"  ⏳ API returned {code}; retrying in {wait:.0f}s...", file=sys.stderr)
+
+
 @retry(
     retry=retry_if_exception(_is_transient),
-    wait=wait_exponential(multiplier=1, max=10),
+    wait=_wait,
     stop=stop_after_attempt(4),
+    before_sleep=_announce_retry,
     reraise=True,
 )
 def _generate(client: Any, model: str, contents: list[types.Content]) -> Any:
