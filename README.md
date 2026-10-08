@@ -63,7 +63,9 @@ read_file("data/resumes/resume_john_doe.pdf")
 search_in_file("data/resumes/resume_john_doe.pdf", "python")  # case-insensitive
 # {'success': True, 'match_count': 3, 'matches': [{'line_number': 7, 'match': 'Python', 'context': '...'}], ...}
 
-write_file("data/summaries/john_doe.txt", "Summary ...")  # creates directories; .txt/.md/.json/.csv only
+write_file(
+    "data/summaries/john_doe.txt", "Summary ..."
+)  # creates directories; .txt/.md/.json/.csv only
 # {'success': True, 'filepath': '...', 'bytes_written': 11, 'overwrote': False}
 ```
 
