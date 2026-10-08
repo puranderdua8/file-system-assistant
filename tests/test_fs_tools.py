@@ -121,3 +121,26 @@ def test_sandbox_blocks_escape(root):
         r = call()
         assert r["success"] is False and "outside" in r["error"]
     assert fs.list_files("..")[0]["success"] is False
+
+
+# ---------- encrypted PDFs ----------
+def _encrypt(src, dst, user_password):
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter(clone_from=PdfReader(str(src)))
+    writer.encrypt(user_password=user_password, owner_password="owner")
+    with open(dst, "wb") as fh:
+        writer.write(fh)
+
+
+def test_pdf_encrypted_with_empty_password_is_readable(resumes):
+    _encrypt(resumes / "carol.PDF", resumes / "locked-empty.pdf", "")
+    r = fs.read_file("resumes/locked-empty.pdf")
+    assert r["success"], r
+    assert "Data scientist" in r["content"]
+
+
+def test_pdf_with_real_password_is_rejected(resumes):
+    _encrypt(resumes / "carol.PDF", resumes / "locked.pdf", "secret")
+    r = fs.read_file("resumes/locked.pdf")
+    assert r["success"] is False and "password" in r["error"]

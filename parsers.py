@@ -7,8 +7,8 @@ and add it to ``PARSERS``. Parsers can assume the file exists; they raise
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from docx import Document
 from pypdf import PdfReader
@@ -28,7 +28,8 @@ def parse_text(path: Path) -> Parsed:
 
 def parse_pdf(path: Path) -> Parsed:
     reader = PdfReader(str(path))
-    if reader.is_encrypted:
+    # Many PDFs are "encrypted" with an empty user password and open fine in viewers.
+    if reader.is_encrypted and not reader.decrypt(""):
         raise ToolError("PDF is password-protected")
     pages = [page.extract_text() or "" for page in reader.pages]
     return "\n".join(pages).strip(), {"page_count": len(pages)}
