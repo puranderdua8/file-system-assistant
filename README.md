@@ -16,11 +16,19 @@ pip install -r requirements.txt
 cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B only)
 ```
 
-Then add resumes to `resumes/`. To try the tools right away, copy the fictional samples:
+## Adding resumes
 
-```bash
-cp sample_resumes/* resumes/
-```
+`resumes/` starts empty. Either:
+
+- **Test with the samples:** copy the fictional resumes from `sample_resumes/` into it:
+
+  ```bash
+  cp sample_resumes/* resumes/
+  ```
+
+- **Use your own:** drop your resume files (`.pdf`, `.docx`, `.txt`, `.md`) into `resumes/`.
+
+Anything you put in `resumes/` is git-ignored, so your documents are never committed.
 
 ## Layout
 
@@ -34,7 +42,7 @@ cp sample_resumes/* resumes/
 | `utils.py` | Small generic helpers |
 | `resumes/` | **Input:** put the resumes to work on here (contents are git-ignored) |
 | `summaries/` | **Output:** files the assistant writes (contents are git-ignored) |
-| `sample_resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) to copy into `resumes/` |
+| `sample_resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) to copy into `resumes/` for testing |
 | `tests/` | pytest suite (no network needed) |
 
 ## The tools
