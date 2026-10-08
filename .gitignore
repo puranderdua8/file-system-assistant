@@ -221,7 +221,7 @@ __marimo__/
 
 # Project-specific: resumes are personal data and summaries are generated output.
 # Keep the folders (via .gitkeep) but never their contents.
-resumes/*
-!resumes/.gitkeep
-summaries/*
-!summaries/.gitkeep
+data/resumes/*
+!data/resumes/.gitkeep
+data/summaries/*
+!data/summaries/.gitkeep

@@ -14,6 +14,7 @@ import argparse
 import os
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -25,6 +26,8 @@ import fs_tools
 from errors import error_response
 
 DEFAULT_MODEL = "gemini-flash-latest"
+# Default sandbox: the model can only touch data/resumes and data/summaries.
+DATA_DIR = Path(__file__).resolve().parent / "data"
 MAX_STEPS = 10
 
 SYSTEM_PROMPT = """\
@@ -187,6 +190,12 @@ def run_agent(
 # --- CLI ----------------------------------------------------------------------
 
 
+def configure_sandbox() -> None:
+    """Confine the tools to FS_ROOT, defaulting to data/. Empty counts as unset."""
+    if not os.environ.get("FS_ROOT"):
+        os.environ["FS_ROOT"] = str(DATA_DIR)
+
+
 def make_client() -> genai.Client:
     load_dotenv()
     key = os.environ.get("GEMINI_API_KEY")
@@ -202,6 +211,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     client = make_client()
+    configure_sandbox()
     model = args.model or os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
     history: list[types.Content] = []
 

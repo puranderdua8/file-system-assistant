@@ -1,7 +1,7 @@
 # File System Assistant
 
-Sandboxed file-system tools for working with resume files (PDF, DOCX, TXT/MD),
-designed to be exposed to an LLM through function calling.
+File-system tools for working with resume files (PDF, DOCX, TXT/MD), with an optional
+path sandbox, designed to be exposed to an LLM through function calling.
 
 > Status: both parts are implemented: the tools (Part A) and the Gemini assistant (Part B).
 
@@ -18,17 +18,17 @@ cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B
 
 ## Adding resumes
 
-`resumes/` starts empty. Either:
+`data/resumes/` starts empty. Either:
 
 - **Test with the samples:** copy the fictional resumes from `sample_resumes/` into it:
 
   ```bash
-  cp sample_resumes/* resumes/
+  cp sample_resumes/* data/resumes/
   ```
 
-- **Use your own:** drop your resume files (`.pdf`, `.docx`, `.txt`, `.md`) into `resumes/`.
+- **Use your own:** drop your resume files (`.pdf`, `.docx`, `.txt`, `.md`) into `data/resumes/`.
 
-Anything you put in `resumes/` is git-ignored, so your documents are never committed.
+Anything you put in `data/resumes/` is git-ignored, so your documents are never committed.
 
 ## Layout
 
@@ -37,12 +37,12 @@ Anything you put in `resumes/` is git-ignored, so your documents are never commi
 | `llm_file_assistant.py` | Gemini assistant: tool schemas, tool-calling loop, CLI |
 | `fs_tools.py` | The four tools: `read_file`, `list_files`, `write_file`, `search_in_file` |
 | `parsers.py` | Text extraction per file type; add a type by adding a function + a `PARSERS` entry |
-| `sandbox.py` | Confines every path to `FS_ROOT` (default: current directory) |
+| `sandbox.py` | Optional sandbox: when `FS_ROOT` is set, confines every path to it (the assistant defaults it to `data/`) |
 | `errors.py` | `ToolError` and `error_response` (the standard failure shape) |
 | `utils.py` | Small generic helpers |
-| `resumes/` | **Input:** put the resumes to work on here (contents are git-ignored) |
-| `summaries/` | **Output:** files the assistant writes (contents are git-ignored) |
-| `sample_resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) to copy into `resumes/` for testing |
+| `data/resumes/` | **Input:** put the resumes to work on here (contents are git-ignored) |
+| `data/summaries/` | **Output:** files the assistant writes (contents are git-ignored) |
+| `sample_resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) to copy into `data/resumes/` for testing (outside the assistant's sandbox) |
 | `tests/` | pytest suite (no network needed) |
 
 ## The tools
@@ -53,26 +53,26 @@ Every tool returns JSON-serialisable data and **never raises**. Failures look li
 ```python
 from fs_tools import read_file, list_files, write_file, search_in_file
 
-list_files("resumes", ".pdf")
+list_files("data/resumes", ".pdf")
 # [{'name': 'resume_john_doe.pdf', 'path': '...', 'size_bytes': 1417, 'modified': '2026-10-08T06:38:59+00:00'}]
 
-read_file("resumes/resume_john_doe.pdf")
+read_file("data/resumes/resume_john_doe.pdf")
 # {'success': True, 'filename': ..., 'file_type': 'pdf', 'content': '...', 'truncated': False,
 #  'metadata': {'size_bytes': ..., 'modified': ..., 'char_count': ..., 'word_count': ..., 'page_count': 1}}
 
-search_in_file("resumes/resume_john_doe.pdf", "python")  # case-insensitive
+search_in_file("data/resumes/resume_john_doe.pdf", "python")  # case-insensitive
 # {'success': True, 'match_count': 3, 'matches': [{'line_number': 7, 'match': 'Python', 'context': '...'}], ...}
 
-write_file("summaries/john_doe.txt", "Summary ...")  # creates directories; .txt/.md/.json/.csv only
+write_file("data/summaries/john_doe.txt", "Summary ...")  # creates directories; .txt/.md/.json/.csv only
 # {'success': True, 'filepath': '...', 'bytes_written': 11, 'overwrote': False}
 ```
 
 Design notes:
-- **Sandbox:** paths outside `FS_ROOT` (e.g. `../x`, `/etc/passwd`) are refused, so a model can't roam the disk.
+- **Sandbox (optional):** the sandbox constrains the untrusted caller, the LLM. When `FS_ROOT` is set, relative paths are anchored to it and anything outside (e.g. `../x`, `/etc/passwd`) is refused. If it is unset, the tools behave like ordinary file functions, so your own scripts and tests can use any path. `llm_file_assistant.py` always turns the sandbox on (default `data/`).
 - **Output limits:** `read_file` truncates at 20,000 characters (`truncated: True`); `search_in_file` returns at most 50 matches (`match_count` is still the full total).
 - **Writes** are atomic (temp file + rename) and limited to text formats, so the model can't produce fake PDFs/DOCX.
 - **Scanned PDFs** have no text layer; `read_file` succeeds with a `warning` rather than doing OCR.
-- **Privacy:** `resumes/` and `summaries/` exist in the repo only as empty folders (`.gitkeep`); everything inside them is git-ignored, so real resumes and generated summaries are never committed.
+- **Privacy:** `data/resumes/` and `data/summaries/` exist in the repo only as empty folders (`.gitkeep`); everything inside them is git-ignored, so real resumes and generated summaries are never committed.
 
 ## The assistant (Part B)
 
@@ -83,15 +83,17 @@ Design notes:
 
 > **Note:** free Gemini API keys are usually rate-limited, so you may see `429` errors during live testing (see [Limitations](#limitations)).
 
-Optional environment variables (in `.env`): `GEMINI_MODEL` (default `gemini-flash-latest`) and `FS_ROOT`.
+The assistant is sandboxed to the `data/` folder, so the model can only see `resumes/` and `summaries/` inside it, and the paths in its answers are relative to `data/`. This holds wherever you launch the script from.
 
-Example queries (with the sample resumes copied into `resumes/`) and the tool calls the model chose (shown on stderr):
+Optional environment variables (in `.env`): `GEMINI_MODEL` (default `gemini-flash-latest`) and `FS_ROOT` (a different sandbox folder; it must contain the `resumes/` and `summaries/` folders).
+
+Example queries (with the sample resumes copied into `data/resumes/`) and the tool calls the model chose (shown on stderr):
 
 | Query | Tool calls |
 |---|---|
 | "Read all resumes in the resumes folder" | `list_files` -> `read_file` x 3 |
 | "Find resumes mentioning Python experience" | `list_files` -> `search_in_file` x 3 |
-| "Create a summary file for resume_john_doe.pdf" | `list_files` -> `read_file` -> `write_file` (`summaries/resume_john_doe_summary.txt`) |
+| "Create a summary file for resume_john_doe.pdf" | `list_files` -> `read_file` -> `write_file` (saved as `data/summaries/resume_john_doe_summary.txt`) |
 
 How it works:
 - Each tool has a hand-written `FunctionDeclaration` (name, description, JSON schema) that the model sees; `TOOL_REGISTRY` maps names to the real functions.
