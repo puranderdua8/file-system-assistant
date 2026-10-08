@@ -1,4 +1,9 @@
-"""Path sandboxing: keep every file operation inside an allowed root directory."""
+"""Optional path sandboxing: confine file operations to a root directory.
+
+The sandbox is off unless ``FS_ROOT`` is set. It exists to constrain an untrusted
+caller (the LLM), so ``llm_file_assistant.py`` always turns it on; code calling
+the tools directly is unrestricted by default.
+"""
 
 from __future__ import annotations
 
@@ -8,18 +13,23 @@ from pathlib import Path
 from errors import ToolError
 
 
-def get_root() -> Path:
-    """Sandbox root: the FS_ROOT env var, or the current directory.
+def get_root() -> Path | None:
+    """Sandbox root from the FS_ROOT env var, or None when no sandbox is configured.
 
     Read on every call (not at import time) so the root can change at runtime.
+    An empty value counts as unset.
     """
-    return Path(os.environ.get("FS_ROOT") or Path.cwd()).expanduser().resolve()
+    value = os.environ.get("FS_ROOT")
+    return Path(value).expanduser().resolve() if value else None
 
 
 def resolve_path(path: str) -> Path:
-    """Resolve ``path`` (relative to the sandbox root) and ensure it stays inside."""
+    """Resolve ``path``; with a sandbox root set, relative paths are anchored to it
+    and the result must stay inside it."""
     root = get_root()
     p = Path(path).expanduser()
+    if root is None:
+        return p.resolve()
     if not p.is_absolute():
         p = root / p
     p = p.resolve()

@@ -152,3 +152,43 @@ def test_cli_reports_api_error_and_exits_cleanly(monkeypatch, capsys):
     monkeypatch.setattr(lfa, "make_client", lambda: FakeClient(_quota_error()))
     lfa.main(["hi"])
     assert "Gemini API error (429)" in capsys.readouterr().err
+
+
+# ---------- sandbox defaults for the assistant ----------
+@pytest.fixture
+def clean_root_env(monkeypatch):
+    monkeypatch.setenv("FS_ROOT", "placeholder")  # so teardown restores the original
+    monkeypatch.delenv("FS_ROOT")
+
+
+def test_assistant_defaults_sandbox_to_data_dir(clean_root_env):
+    import os
+
+    lfa.configure_sandbox()
+    assert os.environ["FS_ROOT"] == str(lfa.DATA_DIR)
+    assert lfa.DATA_DIR.name == "data"
+
+
+def test_assistant_replaces_empty_fs_root(monkeypatch):
+    import os
+
+    monkeypatch.setenv("FS_ROOT", "")
+    lfa.configure_sandbox()
+    assert os.environ["FS_ROOT"] == str(lfa.DATA_DIR)
+
+
+def test_assistant_respects_explicit_fs_root(monkeypatch, tmp_path):
+    import os
+
+    monkeypatch.setenv("FS_ROOT", str(tmp_path))
+    lfa.configure_sandbox()
+    assert os.environ["FS_ROOT"] == str(tmp_path)
+
+
+def test_main_turns_the_sandbox_on(clean_root_env, monkeypatch, capsys):
+    import os
+
+    monkeypatch.setattr(lfa, "make_client", lambda: FakeClient(say("hello")))
+    lfa.main(["hi"])
+    assert os.environ["FS_ROOT"] == str(lfa.DATA_DIR)
+    assert "hello" in capsys.readouterr().out
