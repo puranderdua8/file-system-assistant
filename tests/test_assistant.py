@@ -37,11 +37,6 @@ class FakeClient:
         return item
 
 
-@pytest.fixture(autouse=True)
-def no_retry_sleep(monkeypatch):
-    monkeypatch.setattr(lfa._generate.retry, "sleep", lambda s: None)
-
-
 # ---------- declarations & execute_tool ----------
 def test_declarations_match_registry():
     assert {d.name for d in lfa.TOOL_DECLARATIONS} == set(lfa.TOOL_REGISTRY)
@@ -141,47 +136,19 @@ def test_empty_candidates_handled():
     assert "no answer" in out
 
 
-# ---------- retry ----------
-def test_retries_transient_errors_then_succeeds():
-    boom = genai_errors.ServerError(503, {"error": {"message": "overloaded"}})
-    client = FakeClient(boom, boom, say("ok"))
-    assert lfa.run_agent("hi", client) == "ok"
+# ---------- API errors ----------
+def _quota_error():
+    return genai_errors.ClientError(429, {"error": {"message": "quota exceeded"}})
 
 
-def test_does_not_retry_client_errors():
-    bad = genai_errors.ClientError(400, {"error": {"message": "bad request"}})
-    client = FakeClient(bad, say("never reached"))
+def test_api_errors_propagate_without_retry():
+    client = FakeClient(_quota_error(), say("never reached"))
     with pytest.raises(genai_errors.ClientError):
         lfa.run_agent("hi", client)
+    assert len(client.sent) == 1  # one attempt only
 
 
-# ---------- honoring the server's retry hint ----------
-def _quota_error(delay=None, message="quota exceeded"):
-    err = {"message": message}
-    if delay:
-        err["details"] = [
-            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay}
-        ]
-    return genai_errors.ClientError(429, {"error": err})
-
-
-def test_server_retry_delay_parsing():
-    assert lfa.server_retry_delay(_quota_error("44s")) == 44.0
-    assert lfa.server_retry_delay(_quota_error(message="Please retry in 35.1s.")) == 35.1
-    assert lfa.server_retry_delay(_quota_error()) is None
-    assert lfa.server_retry_delay(ValueError("x")) is None
-
-
-def test_429_waits_for_server_hint_and_retries(monkeypatch):
-    sleeps = []
-    monkeypatch.setattr(lfa._generate.retry, "sleep", sleeps.append)
-    client = FakeClient(_quota_error("44s"), say("ok"))
-    assert lfa.run_agent("hi", client) == "ok"
-    assert sleeps == [45.0]
-
-
-def test_server_hint_is_capped(monkeypatch):
-    sleeps = []
-    monkeypatch.setattr(lfa._generate.retry, "sleep", sleeps.append)
-    lfa.run_agent("hi", FakeClient(_quota_error("600s"), say("ok")))
-    assert sleeps == [lfa.MAX_RETRY_WAIT]
+def test_cli_reports_api_error_and_exits_cleanly(monkeypatch, capsys):
+    monkeypatch.setattr(lfa, "make_client", lambda: FakeClient(_quota_error()))
+    lfa.main(["hi"])
+    assert "Gemini API error (429)" in capsys.readouterr().err
