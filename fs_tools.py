@@ -12,27 +12,17 @@ from __future__ import annotations
 import os
 import re
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 
-from errors import ToolError
+from errors import ToolError, error_response
 from parsers import extract_text
 from sandbox import resolve_path
+from utils import iso_timestamp
 
 WRITABLE_EXTENSIONS = {".txt", ".md", ".json", ".csv"}
 MAX_CONTENT_CHARS = 20_000
 MAX_MATCHES = 50
 CONTEXT_CHARS = 80
-
-
-def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
-
-
-def _error(exc: Exception) -> dict:
-    if isinstance(exc, ToolError):
-        return {"success": False, "error": str(exc)}
-    return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def read_file(filepath: str) -> dict:
@@ -50,7 +40,7 @@ def read_file(filepath: str) -> dict:
             "truncated": len(text) > MAX_CONTENT_CHARS,
             "metadata": {
                 "size_bytes": stat.st_size,
-                "modified": _iso(stat.st_mtime),
+                "modified": iso_timestamp(stat.st_mtime),
                 "char_count": len(text),
                 "word_count": len(text.split()),
                 **extra,
@@ -60,7 +50,7 @@ def read_file(filepath: str) -> dict:
             result["warning"] = "No text extracted (file may be empty or a scanned image)"
         return result
     except Exception as exc:  # noqa: BLE001 - tools must never raise
-        return _error(exc)
+        return error_response(exc)
 
 
 def list_files(directory: str, extension: str | None = None) -> list:
@@ -92,12 +82,12 @@ def list_files(directory: str, extension: str | None = None) -> list:
                     "name": child.name,
                     "path": str(child),
                     "size_bytes": stat.st_size,
-                    "modified": _iso(stat.st_mtime),
+                    "modified": iso_timestamp(stat.st_mtime),
                 }
             )
         return items
     except Exception as exc:  # noqa: BLE001
-        return [_error(exc)]
+        return [error_response(exc)]
 
 
 def write_file(filepath: str, content: str) -> dict:
@@ -131,7 +121,7 @@ def write_file(filepath: str, content: str) -> dict:
             "overwrote": existed,
         }
     except Exception as exc:  # noqa: BLE001
-        return _error(exc)
+        return error_response(exc)
 
 
 def search_in_file(filepath: str, keyword: str) -> dict:
@@ -168,4 +158,4 @@ def search_in_file(filepath: str, keyword: str) -> dict:
             "truncated": total > len(matches),
         }
     except Exception as exc:  # noqa: BLE001
-        return _error(exc)
+        return error_response(exc)
