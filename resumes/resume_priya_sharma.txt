@@ -1,0 +1,19 @@
+Priya Sharma
+Data Scientist | priya.sharma@example.com | Pune, India
+
+SUMMARY
+Data scientist with 4 years of experience in machine learning and analytics.
+
+EXPERIENCE
+Data Scientist, Insight Analytics (2022-Present)
+- Built churn-prediction models in Python (scikit-learn, pandas), improving retention by 9%.
+- Designed dashboards in Tableau and automated weekly reporting with SQL.
+
+Junior Analyst, DataWorks (2020-2022)
+- Cleaned and modelled survey data using R and Excel.
+
+EDUCATION
+M.Sc. Statistics, City University, 2020
+
+SKILLS
+Python, R, SQL, scikit-learn, pandas, Tableau
