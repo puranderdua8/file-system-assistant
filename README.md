@@ -16,6 +16,12 @@ pip install -r requirements.txt
 cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B only)
 ```
 
+Then add resumes to `resumes/`. To try the tools right away, copy the fictional samples:
+
+```bash
+cp sample_resumes/* resumes/
+```
+
 ## Layout
 
 | File | Responsibility |
@@ -26,7 +32,9 @@ cp .env.example .env           # then add your GEMINI_API_KEY (needed for Part B
 | `sandbox.py` | Confines every path to `FS_ROOT` (default: current directory) |
 | `errors.py` | `ToolError` and `error_response` (the standard failure shape) |
 | `utils.py` | Small generic helpers |
-| `resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) |
+| `resumes/` | **Input:** put the resumes to work on here (contents are git-ignored) |
+| `summaries/` | **Output:** files the assistant writes (contents are git-ignored) |
+| `sample_resumes/` | Fictional sample resumes (`.pdf`, `.txt`, `.docx`) to copy into `resumes/` |
 | `tests/` | pytest suite (no network needed) |
 
 ## The tools
@@ -56,7 +64,7 @@ Design notes:
 - **Output limits:** `read_file` truncates at 20,000 characters (`truncated: True`); `search_in_file` returns at most 50 matches (`match_count` is still the full total).
 - **Writes** are atomic (temp file + rename) and limited to text formats, so the model can't produce fake PDFs/DOCX.
 - **Scanned PDFs** have no text layer; `read_file` succeeds with a `warning` rather than doing OCR.
-- **Real resumes:** put them in `resumes/private/` (git-ignored) to keep personal data out of the repo.
+- **Privacy:** `resumes/` and `summaries/` exist in the repo only as empty folders (`.gitkeep`); everything inside them is git-ignored, so real resumes and generated summaries are never committed.
 
 ## The assistant (Part B)
 
