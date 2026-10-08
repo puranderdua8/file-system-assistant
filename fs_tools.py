@@ -56,8 +56,10 @@ def read_file(filepath: str) -> dict:
 def list_files(directory: str, extension: str | None = None) -> list:
     """List files in a directory, optionally filtered by extension (e.g. '.pdf').
 
-    Returns a list of {name, path, size_bytes, modified}. On failure returns a
-    one-item list ``[{"success": False, "error": ...}]`` to keep the list shape.
+    Returns a list of {name, path, size_bytes, modified}. Hidden files (names
+    starting with '.', such as .gitkeep or .DS_Store) are not listed. On failure
+    returns a one-item list ``[{"success": False, "error": ...}]`` to keep the
+    list shape.
     """
     try:
         path = resolve_path(directory)
@@ -72,7 +74,7 @@ def list_files(directory: str, extension: str | None = None) -> list:
                 ext = "." + ext
         items = []
         for child in sorted(path.iterdir(), key=lambda c: c.name.lower()):
-            if not child.is_file():
+            if not child.is_file() or child.name.startswith("."):
                 continue
             if ext and child.suffix.lower() != ext:
                 continue

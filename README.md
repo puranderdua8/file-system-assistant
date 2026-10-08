@@ -72,6 +72,7 @@ write_file(
 Design notes:
 - **Sandbox (optional):** the sandbox constrains the untrusted caller, the LLM. When `FS_ROOT` is set, relative paths are anchored to it and anything outside (e.g. `../x`, `/etc/passwd`) is refused. If it is unset, the tools behave like ordinary file functions, so your own scripts and tests can use any path. `llm_file_assistant.py` always turns the sandbox on (default `data/`).
 - **Output limits:** `read_file` truncates at 20,000 characters (`truncated: True`); `search_in_file` returns at most 50 matches (`match_count` is still the full total).
+- **Hidden files** (names starting with `.`, e.g. `.gitkeep`, `.DS_Store`) are not listed by `list_files`, so the model never mistakes a placeholder for a resume.
 - **Writes** are atomic (temp file + rename) and limited to text formats, so the model can't produce fake PDFs/DOCX.
 - **Scanned PDFs** have no text layer; `read_file` succeeds with a `warning` rather than doing OCR.
 - **Privacy:** `data/resumes/` and `data/summaries/` exist in the repo only as empty folders (`.gitkeep`); everything inside them is git-ignored, so real resumes and generated summaries are never committed.
